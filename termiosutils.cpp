@@ -12,6 +12,8 @@
 #include <map>
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#include <assert.h>
+#include <cstring>
 #include "termiosutils.h"
 
 using namespace std;
@@ -312,6 +314,11 @@ void dumpTermiosCC(cc_t * cc) {
     }
 }
 
+/**
+ * Fill line with '-'.
+ *
+ * Use ioctl to determine width of the terminal.
+ */
 static void drawLine() {
     int width = getConsoleWidth();
     // If not able to get width from console, assume it's 80 columns...
@@ -322,6 +329,31 @@ static void drawLine() {
     cout << string(width - 2, '-') << endl;
 }
 
+bool dumpTermiosInfo(struct termios * tio) {
+    assert(tio != nullptr);
+
+    std::ios oldState(nullptr);
+    oldState.copyfmt(cout);
+
+    drawLine();
+    dumpTermiosIflags(tio->c_iflag);
+    drawLine();
+    dumpTermiosOflags(tio->c_oflag);
+    drawLine();
+    dumpTermiosCflags(tio->c_cflag);
+    drawLine();
+    dumpTermiosLflags(tio->c_lflag);
+    drawLine();
+    dumpTermiosCC(tio->c_cc);
+
+    drawLine();
+    cout.copyfmt(oldState);
+    cout << "c_ispeed = " << getBaudRate(tio->c_ispeed) << endl;
+    cout << "c_ospeed = " << getBaudRate(tio->c_ospeed) << endl;
+
+    return true;
+}
+
 /**
  * Display dump files information.
  * @param fh File Handle to examine.
@@ -330,27 +362,23 @@ static void drawLine() {
 bool dumpTermiosInfo(FILE * fh) {
     bool bRes = false;
     struct termios tio = {};
-    std::ios oldState(nullptr);
-    oldState.copyfmt(cout);
 
     if (fread(&tio, sizeof(tio), 1, fh) == 1) {
-        drawLine();
-        dumpTermiosIflags(tio.c_iflag);
-        drawLine();
-        dumpTermiosOflags(tio.c_oflag);
-        drawLine();
-        dumpTermiosCflags(tio.c_cflag);
-        drawLine();
-        dumpTermiosLflags(tio.c_lflag);
-        drawLine();
-        dumpTermiosCC(tio.c_cc);
+        bRes = dumpTermiosInfo(&tio);
+    }
 
-        drawLine();
-        cout.copyfmt(oldState);
-        cout << "c_ispeed = " << getBaudRate(tio.c_ispeed) << endl;
-        cout << "c_ospeed = " << getBaudRate(tio.c_ospeed) << endl;
+    return bRes;
+}
 
-        bRes = true;
+bool dumpTermiosInfo(string filename) {
+    bool bRes = false;
+    FILE * tios_file = nullptr;
+
+    if ((tios_file = fopen(filename.c_str(), "r")) != nullptr) {
+        bRes = dumpTermiosInfo(tios_file);
+        fclose(tios_file);
+    } else {
+        cerr << "ERROR : " << strerror(errno) << endl;
     }
 
     return bRes;

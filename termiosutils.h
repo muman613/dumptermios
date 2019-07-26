@@ -6,7 +6,11 @@
 #define DUMPTERMIOS_TERMIOSUTILS_H
 
 #include <stdio.h>
+#include <termios.h>
+#include <string>
 
 bool dumpTermiosInfo(FILE * fh);
+bool dumpTermiosInfo(struct termios * tio);
+bool dumpTermiosInfo(std::string filename);
 
 #endif //DUMPTERMIOS_TERMIOSUTILS_H
