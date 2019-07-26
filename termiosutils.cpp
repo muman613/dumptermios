@@ -9,6 +9,9 @@
 #include <vector>
 #include <string>
 #include <iomanip>
+#include <map>
+#include <stdlib.h>
+#include <sys/ioctl.h>
 #include "termiosutils.h"
 
 using namespace std;
@@ -88,74 +91,66 @@ static vector<FLAG_ENTRY> lFlags = {
 };
 
 /**
+ * Baud rate lookup map.
+ */
+static map<speed_t, int> baudTable = {
+    { B50,      50, },
+    { B75,      75, },
+    { B110,     110, },
+    { B134,     134, },
+    { B150,     150, },
+    { B200,     200, },
+    { B300,     300, },
+    { B600,     600, },
+    { B1200,    1200, },
+    { B1800,    1800, },
+    { B2400,    2400, },
+    { B4800,    4800, },
+    { B9600,    9600, },
+    { B19200,   19200, },
+    { B38400,   38400, },
+    { B57600,   57600, },
+    { B115200,  115200, },
+    { B230400,  230400, },
+    { B460800,  460800, },
+    { B500000,  500000, },
+    { B576000,  576000, },
+    { B921600,  921600, },
+    { B1000000, 1000000, },
+    { B1152000, 1152000, },
+    { B1500000, 1500000, },
+    { B2000000, 2000000, },
+    { B2500000, 2500000, },
+    { B3000000, 3000000, },
+    { B3500000, 3500000, },
+    { B4000000, 4000000, },
+};
+
+static int getConsoleWidth() {
+    struct winsize sz = {};
+
+    ioctl(0, TIOCGWINSZ, &sz);
+
+    return sz.ws_col;
+}
+
+/**
  * Convert baud rate to string representation.
  * @param baud termios baud rate value (see termios.h)
- * @return string representing the baud rate in bps
+ * @return integer representing the baud rate
  */
-const char * getBaudRate(uint32_t baud)
+int getBaudRate(speed_t baud)
 {
-    switch (baud) {
-        case B50:
-            return "50";
-        case B75:
-            return "75";
-        case B110:
-            return "110";
-        case B134:
-            return "134";
-        case B150:
-            return "150";
-        case B200:
-            return "200";
-        case B300:
-            return "300";
-        case B600:
-            return "600";
-        case B1200:
-            return "1200";
-        case B1800:
-            return "1800";
-        case B2400:
-            return "2400";
-        case B4800:
-            return "4800";
-        case B9600:
-            return "9600";
-        case B19200:
-            return "19200";
-        case B38400:
-            return "38400";
-        case B57600:
-            return "57600";
-        case B115200:
-            return "115200";
-        case B230400:
-            return "230400";
-        case B460800:
-            return "460800";
-        case B500000:
-            return "500000";
-        case B576000:
-            return "576000";
-        case B921600:
-            return "921600";
-        case B1000000:
-            return "1000000";
-        case B1152000:
-            return "1152000";
-        case B1500000:
-            return "1500000";
-        case B2000000:
-            return "2000000";
-        case B2500000:
-            return "2500000";
-        case B3000000:
-            return "3000000";
-        case B3500000:
-            return "3500000";
-        case B4000000:
-            return "4000000";
+    int baud_rate = -1;
+    auto it = baudTable.find(baud);
+
+    if (it != baudTable.end()) {
+        baud_rate = it->second;
+    } else {
+        cerr << "Unknown baud value " << baud << endl;
     }
+
+    return baud_rate;
 }
 
 /**
@@ -164,8 +159,6 @@ const char * getBaudRate(uint32_t baud)
  */
 static void dumpTermiosIflags(tcflag_t flag)
 {
-    // cerr << __func__ << endl;
-//    cout << "iFlags = " << flag << " 0x" << std::hex << flag << std::dec << endl;
     string sFlags;
     vector<string> vDesc;
 
@@ -318,6 +311,17 @@ void dumpTermiosCC(cc_t * cc) {
         cout << setfill(' ') << setw(12) << ccname << " : 0x" << std::hex << setfill('0') << setw(2) << (int)cc[index++] << endl;
     }
 }
+
+static void drawLine() {
+    int width = getConsoleWidth();
+    // If not able to get width from console, assume it's 80 columns...
+    if (width == 0) {
+        width = 80;
+    }
+
+    cout << string(width - 2, '-') << endl;
+}
+
 /**
  * Display dump files information.
  * @param fh File Handle to examine.
@@ -326,16 +330,27 @@ void dumpTermiosCC(cc_t * cc) {
 bool dumpTermiosInfo(FILE * fh) {
     bool bRes = false;
     struct termios tio = {};
+    std::ios oldState(nullptr);
+    oldState.copyfmt(cout);
 
     if (fread(&tio, sizeof(tio), 1, fh) == 1) {
+        drawLine();
         dumpTermiosIflags(tio.c_iflag);
+        drawLine();
         dumpTermiosOflags(tio.c_oflag);
+        drawLine();
         dumpTermiosCflags(tio.c_cflag);
+        drawLine();
         dumpTermiosLflags(tio.c_lflag);
+        drawLine();
         dumpTermiosCC(tio.c_cc);
 
+        drawLine();
+        cout.copyfmt(oldState);
         cout << "c_ispeed = " << getBaudRate(tio.c_ispeed) << endl;
         cout << "c_ospeed = " << getBaudRate(tio.c_ospeed) << endl;
+
+        bRes = true;
     }
 
     return bRes;
